@@ -1,23 +1,19 @@
 package main
 
 import (
-	"log"
+	"fmt"
 	"os"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/joho/godotenv"
-	fiberSwagger "github.com/swaggo/fiber-swagger"
-
-	"database/sql"
-
-	_ "github.com/lib/pq"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/nuttikung/fiber-vote-api/config"
 	_ "github.com/nuttikung/fiber-vote-api/docs"
+	"github.com/nuttikung/fiber-vote-api/router"
+	fiberSwagger "github.com/swaggo/fiber-swagger"
 )
 
-var db *sql.DB
-
-var candidates []Candidate
+// var candidates []models.Candidate
 
 // @title Most popular Mascot in Thailand API
 // @version 1.0
@@ -34,27 +30,18 @@ var candidates []Candidate
 // @host example.swagger.io
 // @BasePath /api/v1
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Fatal("LOAD ENV error")
-	}
+	config.InitializeEnv()
 
-	connStr := os.Getenv("DATABASE_URL")
-
-	_db, err := sql.Open("postgres", connStr)
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	db = _db
-
-	defer db.Close()
-
-	println("Connect Database Successful")
+	db := config.InitializeDatabase()
+	// defer db.Close()
 
 	app := fiber.New()
 	app.Use(cors.New())
-	app.Use(logMiddleware)
+	app.Use(logger.New(logger.Config{
+		Format:     "${time} | ${method} | ${status} | ${path}",
+		TimeFormat: "02-Jan-2006 15:04:05",
+		TimeZone:   "Asia/Bangkok",
+	}))
 
 	app.Get("/swagger/*", fiberSwagger.WrapHandler)
 
@@ -63,14 +50,14 @@ func main() {
 		return c.SendStatus(fiber.StatusOK)
 	})
 
-	app.Get("/api/v1/candidate", getCandidates)
-	app.Get("/api/v1/candidate/:id", getCandidate)
-
+	// app.Post("/api/v1/vote", postVote)
 	app.Post("/api/v1/upload", postUploadFile)
 
-	app.Post("/api/v1/vote", postVote)
+	router.InitializeRoutes(app, db)
 
-	app.Listen(":3000")
+	// running on port
+	port := os.Getenv("PORT")
+	app.Listen(fmt.Sprintf(":%v", port))
 }
 
 func postUploadFile(c *fiber.Ctx) error {
